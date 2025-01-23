@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Embedding Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f9f9f9; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); position: relative; }
+        h1 { text-align: center; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; }
+        select, input[type="text"], input[type="file"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        #fileList { margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f1f1f1; }
+        #fileList div { margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .remove-file { color: red; cursor: pointer; }
+        button { width: 100%; padding: 10px; background: #007BFF; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+
+        /* Overlay styles */
+        .overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+        }
+        .overlay-content {
+            background: #007BFF;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>File Embedding Tool</h1>
+
+        <div class="form-group">
+            <label for="files">Select Files:</label>
+            <input type="file" id="files" multiple>
+            <div id="fileList"></div>
+        </div>
+
+        <div class="form-group">
+            <label for="modelName">Embedding Model:</label>
+            <select id="modelName">
+                <option value="text-embedding-3-small">text-embedding-3-small</option>
+                <option value="text-embedding-3-large">text-embedding-3-large</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="chunkSize">Chunk Size (50-300):</label>
+            <input type="number" id="chunkSize" min="50" max="300" placeholder="Enter chunk size">
+        </div>
+
+        <div class="form-group">
+            <label for="overlap">Overlap (1-50):</label>
+            <input type="number" id="overlap" min="1" max="50" placeholder="Enter overlap">
+        </div>
+
+        <button id="embedButton">Start Embedding</button>
+
+        <div class="overlay" id="overlay">
+            <div class="overlay-content">
+                <h2>Embedding in Process</h2>
+                <p>Please wait while files are being embedded...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const selectedFiles = [];
+        const fileListElement = document.getElementById('fileList');
+        const filesInput = document.getElementById('files');
+        const embedButton = document.getElementById('embedButton');
+        const overlay = document.getElementById('overlay');
+
+        filesInput.addEventListener('change', function(e) {
+            const newFiles = Array.from(this.files);
+
+            newFiles.forEach(file => {
+                // Check if file is not already in the list
+                if (!selectedFiles.some(f => f.name === file.name)) {
+                    selectedFiles.push(file);
+
+                    // Create file entry with remove option
+                    const fileItem = document.createElement('div');
+
+                    // File name
+                    const fileName = document.createElement('span');
+                    fileName.textContent = file.name;
+
+                    // Remove button
+                    const removeButton = document.createElement('span');
+                    removeButton.textContent = '✖';
+                    removeButton.classList.add('remove-file');
+                    removeButton.addEventListener('click', () => {
+                        // Remove from selectedFiles array
+                        const index = selectedFiles.findIndex(f => f.name === file.name);
+                        if (index > -1) {
+                            selectedFiles.splice(index, 1);
+                        }
+
+                        // Remove from display
+                        fileItem.remove();
+                    });
+
+                    fileItem.appendChild(fileName);
+                    fileItem.appendChild(removeButton);
+                    fileListElement.appendChild(fileItem);
+                }
+            });
+
+            // Clear the file input to allow re-selecting same files if needed
+            filesInput.value = '';
+        });
+
+        embedButton.addEventListener('click', function() {
+            const modelName = document.getElementById('modelName').value;
+            const chunkSize = document.getElementById('chunkSize').value;
+            const overlap = document.getElementById('overlap').value;
+
+            // Validate inputs
+            if (!chunkSize || chunkSize < 50 || chunkSize > 300) {
+                alert('Chunk size must be between 50 and 300');
+                return;
+            }
+
+            if (!overlap || overlap < 1 || overlap > 50) {
+                alert('Overlap must be between 1 and 50');
+                return;
+            }
+
+            if (selectedFiles.length === 0) {
+                alert('Please select files');
+                return;
+            }
+
+            // Show overlay
+            overlay.style.display = 'flex';
+
+            // Disable inputs and button during embedding
+            embedButton.disabled = true;
+            filesInput.disabled = true;
+            document.getElementById('modelName').disabled = true;
+            document.getElementById('chunkSize').disabled = true;
+            document.getElementById('overlap').disabled = true;
+
+            // Create FormData
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+            formData.append('model_name', modelName);
+            formData.append('chunk_size', chunkSize);
+            formData.append('overlap', overlap);
+
+            // Send request
+            axios.post('/embed_files', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            })
+            .then(response => {
+                if (response.data.status === 'success') {
+                    // Navigate to chat screen with result file
+                    window.location.href = `/chat?result_file=${response.data.result_file}`;
+                }
+            })
+            .catch(error => {
+                // Hide overlay
+                overlay.style.display = 'none';
+
+                // Re-enable inputs
+                embedButton.disabled = false;
+                filesInput.disabled = false;
+                document.getElementById('modelName').disabled = false;
+                document.getElementById('chunkSize').disabled = false;
+                document.getElementById('overlap').disabled = false;
+
+                alert('Error embedding files: ' + (error.response?.data?.message || 'Unknown error'));
+            });
+        });
+    </script>
+</body>
+</html>

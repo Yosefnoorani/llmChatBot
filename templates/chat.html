@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Interface</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f9f9f9; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); }
+        h1 { text-align: center; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; }
+        select, input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        #chat { margin-top: 20px; border: 1px solid #ccc; border-radius: 4px; padding: 10px; max-height: 300px; overflow-y: auto; background: #f1f1f1; }
+        .chat-entry { margin-bottom: 10px; }
+        .chat-entry.user { text-align: right; }
+        .chat-entry.bot { text-align: left; }
+        .chat-entry p { display: inline-block; padding: 10px; border-radius: 4px; max-width: 80%; word-wrap: break-word; }
+        .chat-entry.user p { background: #007BFF; color: #fff; }
+        .chat-entry.bot p { background: #d9dde0; color: #000; }
+        .sender-label { font-weight: bold; margin-right: 5px; }
+        button { width: 100%; padding: 10px; background: #007BFF; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Chatbot</h1>
+        <div class="form-group">
+            <label for="languageModel">Select Language Model:</label>
+            <select id="languageModel">
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="gpt-4o">gpt-4o</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="embeddingModel">Select Embedding Model:</label>
+            <select id="embeddingModel">
+                <option value="text-embedding-3-small">text-embedding-3-small</option>
+                <option value="text-embedding-3-large">text-embedding-3-large</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="jsonFile">Enter JSON File Path:</label>
+            <input type="text" id="jsonFile" placeholder="Enter JSON file path">
+        </div>
+        <div class="form-group">
+            <label for="userQuery">Enter your question:</label>
+            <input type="text" id="userQuery" placeholder="Type your question here">
+        </div>
+        <button id="sendButton">Send</button>
+        <div id="chat"></div>
+    </div>
+
+    <script>
+        const chat = document.getElementById('chat');
+        const sendButton = document.getElementById('sendButton');
+        const userQueryInput = document.getElementById('userQuery');
+        const languageModelSelect = document.getElementById('languageModel');
+        const embeddingModelSelect = document.getElementById('embeddingModel');
+        const jsonFileInput = document.getElementById('jsonFile');
+
+        // Focus on userQuery input when page loads
+        window.addEventListener('load', () => {
+            userQueryInput.focus();
+        });
+
+        // Add Enter key event listener to trigger send button
+        userQueryInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendButton.click();
+            }
+        });
+
+        // Get the JSON file path from the URL query parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const jsonFilePath = urlParams.get('result_file');
+
+        if (jsonFilePath) {
+            // Populate the JSON file path field with the value from the query parameter
+            jsonFileInput.value = jsonFilePath;
+        }
+
+        sendButton.addEventListener('click', () => {
+            const languageModel = languageModelSelect.value;
+            const embeddingModel = embeddingModelSelect.value;
+            const jsonFile = jsonFileInput.value;
+            const userQuery = userQueryInput.value;
+
+            if (!userQuery) {
+                alert('Please enter a question.');
+                return;
+            }
+
+            addChatEntry('user', `me: ${userQuery}`);
+            addChatEntry('bot', 'chatBot: ');
+
+            const botEntry = document.querySelector('.chat-entry.bot:last-child p');
+
+            fetch('/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    query: userQuery,
+                    language_model: languageModel,
+                    embedding_model: embeddingModel,
+                    json_file: jsonFile
+                })
+            })
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                function processStream({ done, value }) {
+                    if (done) {
+                        // Reset focus to userQuery after response is complete
+                        userQueryInput.value = '';
+                        userQueryInput.focus();
+                        return;
+                    }
+
+                    const chunk = decoder.decode(value);
+                    botEntry.textContent += chunk;
+
+                    reader.read().then(processStream);
+                }
+
+                reader.read().then(processStream);
+            })
+            .catch(error => {
+                console.error(error);
+                const botEntry = document.querySelector('.chat-entry.bot:last-child p');
+                botEntry.textContent = 'chatBot: Error: Unable to fetch response.';
+
+                // Reset focus to userQuery after error
+                userQueryInput.value = '';
+                userQueryInput.focus();
+            });
+        });
+
+        function addChatEntry(sender, message) {
+            const chatElement = document.getElementById('chat');
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('chat-entry', sender);
+
+            const paragraphElement = document.createElement('p');
+            paragraphElement.textContent = message;
+
+            messageElement.appendChild(paragraphElement);
+            chatElement.appendChild(messageElement);
+            chatElement.scrollTop = chatElement.scrollHeight;
+        }
+    </script>
+</body>
+</html>
