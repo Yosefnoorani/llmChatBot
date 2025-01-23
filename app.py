@@ -67,23 +67,20 @@ def handle_query():
     language_model = data.get('language_model')
     embedding_model = data.get('embedding_model')
     json_file = data.get('json_file')
+    top_k = int(data.get('top_k', 5))  # Default to 5 if not provided
 
     def generate():
         try:
             answer_query_with_streaming.initialize_settings(language_model, embedding_model)
             nodes = answer_query_with_streaming.load_embeddings_from_json(json_file, embedding_model)
-
             if nodes is None:
                 yield "No embeddings found for the selected model."
                 return
-
-            stream_generator = answer_query_with_streaming.build_and_query_index(nodes, query, top_k=5)
-
+            stream_generator = answer_query_with_streaming.build_and_query_index(nodes, query, top_k=top_k)
             for chunk in stream_generator:
                 yield chunk
         except Exception as e:
             yield f"Error processing query: {str(e)}"
-
     return Response(stream_with_context(generate()), content_type='text/plain')
 
 

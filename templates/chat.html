@@ -42,6 +42,10 @@
             </select>
         </div>
         <div class="form-group">
+            <label for="topK">Top Results (3-10):</label>
+            <input type="number" id="topK" min="3" max="10" value="5" placeholder="Enter number of top results">
+        </div>
+        <div class="form-group">
             <label for="jsonFile">Enter JSON File Path:</label>
             <input type="text" id="jsonFile" placeholder="Enter JSON file path">
         </div>
@@ -153,6 +157,24 @@
             chatElement.appendChild(messageElement);
             chatElement.scrollTop = chatElement.scrollHeight;
         }
+
+
+        // Add this line with the other form data
+        formData.append('top_k', document.getElementById('topK').value);
+
+        // Also modify the disabled/enabled inputs section to include the new input
+        topKInput = document.getElementById('topK');
+        topKInput.disabled = true;  // When disabling
+        topKInput.disabled = false;  // When re-enabling
+
+        const queryData = {
+            query: userInput,
+            language_model: languageModelSelect.value,
+            embedding_model: embeddingModelSelect.value,
+            json_file: jsonFile,
+            top_k: document.getElementById('topK').value  // Add this line
+        };
+
     </script>
 </body>
 </html>
