@@ -7,6 +7,8 @@ from llama_index.core.data_structs import Node
 from llama_index.llms.openai import OpenAI
 from llama_index.embeddings.openai import OpenAIEmbedding
 from get_secret_openai import get_secret
+from pymilvus import connections, FieldSchema, CollectionSchema, Collection, DataType
+
 
 os.environ["OPENAI_API_KEY"] = get_secret()
 
@@ -38,49 +40,71 @@ def load_embeddings_from_json(json_file_path: str, embedding_model: str) -> Opti
     ]
 
 
-def build_and_query_index(nodes: List[Node], query: str, top_k: int) -> Generator[str, None, None]:
-    index = VectorStoreIndex(nodes, show_progress=True)
-    query_engine = index.as_query_engine(
-        streaming=True,
-        similarity_top_k=top_k
+# def build_and_query_index(nodes: List[Node], query: str, top_k: int) -> Generator[str, None, None]:
+#     index = VectorStoreIndex(nodes, show_progress=True)
+#     query_engine = index.as_query_engine(
+#         streaming=True,
+#         similarity_top_k=top_k
+#     )
+#     response = query_engine.query(query)
+#
+#     # Yield streaming response
+#     for text in response.response_gen:
+#         yield text
+
+
+def build_and_query_index_in_milvus(query, embedding_model, top_k):
+    """Generate query vector and perform similarity search in Milvus"""
+    query_vector = Settings.embed_model.get_text_embedding(query)
+    results = search_in_milvus("embedding_collection", query_vector, top_k)
+    for result in results:
+        yield result.entity.text
+
+
+# def query_embedding_with_streaming(
+#         query: str = "What are the key points in these documents?",
+#         json_embedding: str = "embedding_folder/8c3951f6e15a4c148dba9b13e0fa4786.json",
+#         language_model: str = "gpt-4o-mini",
+#         embedding_model: str = "text-embedding-3-small",
+#         top_k: int = 5
+# ) -> Optional[str]:
+#     try:
+#         initialize_settings(language_model, embedding_model)
+#         nodes = load_embeddings_from_json(json_embedding, embedding_model)
+#
+#         if nodes is None:
+#             return "No embeddings found for the selected model."
+#
+#         stream_generator = build_and_query_index(nodes, query, top_k)
+#         full_response = ""
+#         for chunk in stream_generator:
+#             full_response += chunk
+#
+#         return full_response
+#
+#     except Exception as e:
+#         return f"Error processing query: {str(e)}"
+
+
+def search_in_milvus(collection_name, query_vector, top_k=5):
+    """Search embeddings in Milvus"""
+    collection = Collection(name=collection_name)
+    search_params = {"metric_type": "L2", "params": {"nprobe": 10}}
+    results = collection.search(
+        data=[query_vector],
+        anns_field="embedding",
+        param=search_params,
+        limit=top_k,
+        output_fields=["text"]
     )
-    response = query_engine.query(query)
-
-    # Yield streaming response
-    for text in response.response_gen:
-        yield text
+    return results
 
 
-def query_embedding_with_streaming(
-        query: str = "What are the key points in these documents?",
-        json_embedding: str = "embedding_folder/8c3951f6e15a4c148dba9b13e0fa4786.json",
-        language_model: str = "gpt-4o-mini",
-        embedding_model: str = "text-embedding-3-small",
-        top_k: int = 5
-) -> Optional[str]:
-    try:
-        initialize_settings(language_model, embedding_model)
-        nodes = load_embeddings_from_json(json_embedding, embedding_model)
-
-        if nodes is None:
-            return "No embeddings found for the selected model."
-
-        stream_generator = build_and_query_index(nodes, query, top_k)
-        full_response = ""
-        for chunk in stream_generator:
-            full_response += chunk
-
-        return full_response
-
-    except Exception as e:
-        return f"Error processing query: {str(e)}"
-
-
-if __name__ == "__main__":
-    query_embedding_with_streaming(
-        query="What are the key points of the portal",
-        json_embedding="embedding_folder/8c3951f6e15a4c148dba9b13e0fa4786.json",
-        language_model="gpt-4o-mini",
-        embedding_model="text-embedding-3-small",
-        top_k=3
-    )
+# if __name__ == "__main__":
+#     query_embedding_with_streaming(
+#         query="What are the key points of the portal",
+#         json_embedding="embedding_folder/8c3951f6e15a4c148dba9b13e0fa4786.json",
+#         language_model="gpt-4o-mini",
+#         embedding_model="text-embedding-3-small",
+#         top_k=3
+#     )
